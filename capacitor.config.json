@@ -1,0 +1,6 @@
+{
+  "appId": "tr.av.udfeditor",
+  "appName": "UDF Editör",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mobil UDF Editör</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 12px;
+      background: #f1f5f9;
+      color: #1e293b;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      background: #ffffff;
+      padding: 12px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.07);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    button, label.btn {
+      background: #1e40af;
+      color: #ffffff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    button:active, label.btn:active { opacity: 0.85; transform: scale(0.98); }
+    button.secondary { background: #475569; }
+    button.pdf-btn { background: #b91c1c; }
+    button.format-btn { background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; padding: 6px 12px; }
+    input[type="file"] { display: none; }
+    .format-bar {
+      display: flex;
+      gap: 6px;
+      width: 100%;
+      margin-top: 6px;
+      padding-top: 8px;
+      border-top: 1px solid #e2e8f0;
+    }
+    #editor-container {
+      margin-top: 14px;
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 24px;
+      min-height: 75vh;
+      border: 1px solid #cbd5e1;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    }
+    #editor {
+      min-height: 70vh;
+      outline: none;
+      line-height: 1.7;
+      font-family: "Times New Roman", Times, serif;
+      font-size: 16px;
+      white-space: pre-wrap;
+    }
+    .status-bar {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #64748b;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <label class="btn">
+      📂 UDF Aç
+      <input type="file" id="fileInput" accept=".udf">
+    </label>
+    <button class="secondary" onclick="exportUDF()">💾 UDF Kaydet</button>
+    <button class="pdf-btn" onclick="exportPDF()">📄 PDF İndir</button>
+
+    <div class="format-bar">
+      <button class="format-btn" onclick="document.execCommand('bold')"><b>B</b></button>
+      <button class="format-btn" onclick="document.execCommand('italic')"><i>I</i></button>
+      <button class="format-btn" onclick="document.execCommand('underline')"><u>U</u></button>
+      <button class="format-btn" onclick="document.execCommand('justifyLeft')">Sol</button>
+      <button class="format-btn" onclick="document.execCommand('justifyCenter')">Orta</button>
+      <button class="format-btn" onclick="document.execCommand('justifyFull')">İki Yana</button>
+    </div>
+  </div>
+
+  <div id="editor-container">
+    <div id="editor" contenteditable="true" placeholder="UYAP (.udf) belgesi seçin veya doğrudan yazmaya başlayın..."></div>
+  </div>
+  <div class="status-bar" id="statusBar">Hazır</div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const editor = document.getElementById('editor');
+    const statusBar = document.getElementById('statusBar');
+
+    fileInput.addEventListener('change', async function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      statusBar.innerText = "Dosya ayrıştırılıyor...";
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const xmlFile = zip.file("content.xml");
+        
+        if (!xmlFile) {
+          alert("Hata: UDF arşivi içinde content.xml bulunamadı.");
+          statusBar.innerText = "Geçersiz dosya";
+          return;
+        }
+
+        const rawXml = await xmlFile.async("string");
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(rawXml, "application/xml");
+        
+        let textContent = "";
+        const contents = xmlDoc.getElementsByTagName("content");
+        if (contents.length > 0) {
+          for (let i = 0; i < contents.length; i++) {
+            textContent += contents[i].textContent + "\n";
+          }
+        } else {
+          textContent = xmlDoc.documentElement.textContent;
+        }
+
+        editor.innerText = textContent.trim();
+        statusBar.innerText = "Yüklendi: " + file.name;
+      } catch (err) {
+        alert("Ayrıştırma hatası: " + err.message);
+        statusBar.innerText = "Hata oluştu";
+      }
+    });
+
+    async function exportUDF() {
+      const text = editor.innerText;
+      if (!text.trim()) {
+        alert("Lütfen önce bir içerik girin.");
+        return;
+      }
+
+      statusBar.innerText = "UDF oluşturuluyor...";
+      const escapedText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const contentXml = `<?xml version="1.0" encoding="UTF-8"?>\n<document>\n  <content>${escapedText}</content>\n</document>`;
+
+      const zip = new JSZip();
+      zip.file("content.xml", contentXml);
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = "duzenlenmis_evrak.udf";
+      link.click();
+      statusBar.innerText = "UDF başarıyla indirildi.";
+    }
+
+    function exportPDF() {
+      statusBar.innerText = "PDF hazırlanıyor...";
+      const opt = {
+        margin:       [15, 12, 15, 12],
+        filename:     'uyap_belge.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+      html2pdf().set(opt).from(editor).save().then(() => {
+        statusBar.innerText = "PDF başarıyla indirildi.";
+      });
+    }
+  </script>
+</body>
+</html>
